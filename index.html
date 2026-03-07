@@ -5951,82 +5951,94 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace') calcDelete();
     if (e.key === 'Escape') calcClear();
 });
-// === ПАРСЕР ТЕКСТОВОГО ФАЙЛУ (CHANGELOG.TXT) ===
+// === РОЗУМНИЙ ПАРСЕР (ЧИТАЄ ЗНИЗУ ВГОРУ) ===
     function initChangelog() {
-        // Завантажуємо .txt замість .json
         fetch('changelog.txt?v=' + Date.now())
             .then(response => {
-                if (!response.ok) throw new Error("Файл changelog.txt не знайдено");
+                if (!response.ok) throw new Error("Файл не знайдено");
                 return response.text();
             })
             .then(text => {
-                const lines = text.split('\n'); // Розбиваємо на рядки
-                const listContainer = document.getElementById('ver-list');
-                const numEl = document.getElementById('ver-number');
-                const dateEl = document.getElementById('ver-date'); // Якщо він є
+                // 1. Розбиваємо весь текст на рядки
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
                 
-                if (!listContainer) return;
-                listContainer.innerHTML = '';
-                if (dateEl) dateEl.textContent = ''; // Ховаємо дату в шапці
-
-                let isFirstVersion = true;
+                // 2. Групуємо рядки у "блоки версій"
+                let versions = [];
+                let currentVer = null;
 
                 lines.forEach(line => {
-                    line = line.trim();
-                    if (!line) return; // Пропускаємо порожні рядки
-
-                    // 1. Перевірка: чи це рядок ВЕРСІЇ (починається на 'v' або 'V' і цифру)
+                    // Перевіряємо, чи це заголовок версії (наприклад "v1.0")
                     if (line.match(/^v\d/i)) {
+                        // Якщо вже збирали попередню версію, зберігаємо її
+                        if (currentVer) versions.push(currentVer);
                         
-                        // Якщо це найперша знайдена версія — ставимо її в шапку пігулки
-                        if (isFirstVersion) {
-                            if (numEl) numEl.textContent = line;
-                            isFirstVersion = false;
-                        } else {
-                            // Для всіх інших версій створюємо роздільник у списку
-                            const separator = document.createElement('li');
-                            separator.style.display = 'block';
-                            separator.innerHTML = `<div class="history-separator">${line}</div>`;
-                            listContainer.appendChild(separator);
-                        }
-                        return; // Переходимо до наступного рядка
+                        // Починаємо нову версію
+                        currentVer = {
+                            title: line,
+                            changes: []
+                        };
+                    } else if (currentVer) {
+                        // Якщо це не заголовок, значить це опис змін — додаємо до поточної версії
+                        currentVer.changes.push(line);
                     }
+                });
+                // Не забуваємо додати останню версію, яка була в циклі
+                if (currentVer) versions.push(currentVer);
 
-                    // 2. Обробка рядка ЗМІН (NEW:, FIX: тощо)
-                    const li = document.createElement('li');
-                    li.className = 'log-item';
+                // === МАГІЯ ТУТ ===
+                // Якщо ви пишете нові версії ВНИЗУ файлу, нам треба перевернути масив,
+                // щоб на сайті найновіша (остання в файлі) стала першою.
+                versions.reverse(); 
 
-                    // Шукаємо двокрапку, щоб відділити тип від тексту
-                    const colonIndex = line.indexOf(':');
-                    
-                    if (colonIndex > -1) {
-                        // Якщо є двокрапка (наприклад "NEW: Текст")
-                        const type = line.substring(0, colonIndex).trim().toUpperCase(); // NEW
-                        const desc = line.substring(colonIndex + 1).trim(); // Текст
+                // 3. Відображення (Рендеринг)
+                const numEl = document.getElementById('ver-number');
+                const dateEl = document.getElementById('ver-date');
+                const listContainer = document.getElementById('ver-list');
+                
+                if (listContainer) listContainer.innerHTML = '';
+                if (dateEl) dateEl.textContent = ''; // Ховаємо дату в шапці
 
-                        // Визначаємо колір бейджа
-                        let badgeClass = 'upd'; // сірий/синій за замовчуванням
-                        if (type === 'NEW') badgeClass = 'new'; // зелений
-                        if (type === 'FIX') badgeClass = 'fix'; // червоний
-                        if (type === 'DEL') badgeClass = 'fix'; // червоний для видалень
-
-                        li.innerHTML = `
-                            <span class="badge ${badgeClass}">${type}</span>
-                            <span>${desc}</span>
-                        `;
+                versions.forEach((ver, index) => {
+                    // Першу (тепер вже найновішу) версію ставимо в заголовок пігулки
+                    if (index === 0) {
+                        if (numEl) numEl.textContent = ver.title;
                     } else {
-                        // Якщо двокрапки немає, просто виводимо текст (наприклад, замітка)
-                        li.innerHTML = `<span>${line}</span>`;
+                        // Інші версії відокремлюємо роздільником
+                        const separator = document.createElement('li');
+                        separator.style.display = 'block';
+                        separator.innerHTML = `<div class="history-separator">${ver.title}</div>`;
+                        listContainer.appendChild(separator);
                     }
 
-                    listContainer.appendChild(li);
+                    // Виводимо зміни цієї версії
+                    ver.changes.forEach(changeText => {
+                        const li = document.createElement('li');
+                        li.className = 'log-item';
+
+                        const colonIndex = changeText.indexOf(':');
+                        if (colonIndex > -1) {
+                            const type = changeText.substring(0, colonIndex).trim().toUpperCase();
+                            const desc = changeText.substring(colonIndex + 1).trim();
+
+                            let badgeClass = 'upd';
+                            if (type === 'NEW') badgeClass = 'new';
+                            if (type === 'FIX') badgeClass = 'fix';
+                            if (type === 'DEL') badgeClass = 'fix';
+
+                            li.innerHTML = `
+                                <span class="badge ${badgeClass}">${type}</span>
+                                <span>${desc}</span>
+                            `;
+                        } else {
+                            li.innerHTML = `<span>${changeText}</span>`;
+                        }
+                        listContainer.appendChild(li);
+                    });
                 });
             })
             .catch(err => {
                 console.warn(err);
                 document.getElementById('ver-number').textContent = "v?.?";
-                const list = document.getElementById('ver-list');
-                if(list) list.innerHTML = '<li class="log-item"><span>Не вдалося прочитати changelog.txt</span></li>';
             });
     }
 
@@ -6034,6 +6046,7 @@ document.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
