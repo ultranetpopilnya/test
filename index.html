@@ -5947,68 +5947,86 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace') calcDelete();
     if (e.key === 'Escape') calcClear();
 });
-// === СКРИПТ ДЛЯ ЧИТАННЯ CHANGELOG.JSON (ВИПРАВЛЕНИЙ) ===
+// === СКРИПТ ДЛЯ ЧИТАННЯ ПОВНОЇ ІСТОРІЇ (CHANGELOG) ===
     function initChangelog() {
-        // Додаємо timestamp, щоб уникнути кешування
+        // Додаємо timestamp, щоб бачити свіжі зміни без кешу
         fetch('changelog.json?v=' + Date.now())
             .then(response => {
-                // Якщо файл не знайдено або помилка сервера
-                if (!response.ok) {
-                    throw new Error("Файл changelog.json не знайдено");
-                }
+                if (!response.ok) throw new Error("Файл не знайдено");
                 return response.json();
             })
             .then(data => {
-                // 1. Знаходимо елементи за ПРАВИЛЬНИМИ ID (як у HTML)
+                // Перевіряємо, чи є масив releases
+                if (!data.releases || !Array.isArray(data.releases) || data.releases.length === 0) {
+                    throw new Error("Некоректний формат JSON");
+                }
+
+                // 1. Беремо НАЙНОВІШУ версію (першу в списку) для шапки пігулки
+                const latest = data.releases[0];
                 const numEl = document.getElementById('ver-number');
                 const dateEl = document.getElementById('ver-date');
-                const listEl = document.getElementById('ver-list');
+                
+                if (numEl) numEl.textContent = latest.version;
+                if (dateEl) dateEl.textContent = latest.date;
 
-                // 2. Вставляємо номер версії та дату
-                if (numEl) numEl.textContent = data.version;
-                if (dateEl) dateEl.textContent = data.date;
+                // 2. Будуємо ВЕСЬ список змін
+                const listContainer = document.getElementById('ver-list');
+                if (!listContainer) return;
+                
+                listContainer.innerHTML = ''; // Очищаємо
 
-                // 3. Будуємо список змін
-                if (listEl) {
-                    listEl.innerHTML = ''; // Очищаємо старе ("Завантаження...")
+                // Проходимось по кожній версії в файлі
+                data.releases.forEach((release, index) => {
+                    
+                    // А) Додаємо заголовок версії (роздільник)
+                    // Але для найпершої версії можна не додавати, бо вона вже є в шапці картки.
+                    // АБО додавати всім для краси. Давайте додамо всім, крім першої, щоб не дублювати шапку.
+                    
+                    if (index > 0) {
+                        const separator = document.createElement('li');
+                        separator.style.display = 'block'; // Щоб займав весь рядок
+                        separator.innerHTML = `
+                            <div class="history-separator">
+                                <span>${release.version}</span>
+                                <span class="history-date">${release.date}</span>
+                            </div>
+                        `;
+                        listContainer.appendChild(separator);
+                    }
 
-                    if (Array.isArray(data.changes)) {
-                        data.changes.forEach(item => {
+                    // Б) Додаємо пункти змін для цієї версії
+                    if (release.changes && Array.isArray(release.changes)) {
+                        release.changes.forEach(change => {
                             const li = document.createElement('li');
                             li.className = 'log-item';
                             
-                            // Визначаємо колір бейджа (NEW, FIX, UPD)
-                            let typeClass = 'upd'; // за замовчуванням синій
-                            const type = item.type ? item.type.toUpperCase() : 'UPD';
-                            
+                            // Визначаємо колір
+                            let typeClass = 'upd'; 
+                            const type = change.type ? change.type.toUpperCase() : 'UPD';
                             if (type === 'NEW') typeClass = 'new';
                             if (type === 'FIX') typeClass = 'fix';
 
                             li.innerHTML = `
-                                <span class="badge ${typeClass}">${item.type}</span>
-                                <span>${item.text}</span>
+                                <span class="badge ${typeClass}">${change.type}</span>
+                                <span>${change.text}</span>
                             `;
-                            listEl.appendChild(li);
+                            listContainer.appendChild(li);
                         });
                     }
-                }
+                });
             })
             .catch(err => {
-                console.warn('Помилка завантаження changelog:', err);
+                console.warn('Помилка історії:', err);
                 const numEl = document.getElementById('ver-number');
+                if (numEl) numEl.textContent = "v?.?";
                 const listEl = document.getElementById('ver-list');
-                
-                // Відображаємо помилку в інтерфейсі
-                if (numEl) numEl.textContent = "v3.9 (Offline)";
-                if (listEl) {
-                    listEl.innerHTML = '<li class="log-item" style="color:red"><span>Не вдалося завантажити файл історії.</span></li>';
-                }
+                if (listEl) listEl.innerHTML = '<li class="log-item"><span>Помилка завантаження логу.</span></li>';
             });
     }
 
-    // Запускаємо функцію після завантаження сторінки
     document.addEventListener('DOMContentLoaded', initChangelog);
 </script>
 </body>
 </html>
+
 
