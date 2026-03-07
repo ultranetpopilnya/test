@@ -3188,6 +3188,29 @@ body.dark .scroll-nav-btn.visible:hover {
     border-color: var(--secondary-accent-color);
     color: var(--secondary-accent-color);
 }
+/* Стиль для роздільника версій у списку */
+.history-separator {
+    margin-top: 15px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px dashed var(--input-border-color);
+    font-weight: 700;
+    color: var(--primary-accent-color);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.history-date {
+    font-weight: 400;
+    color: var(--tab-inactive-text);
+    font-size: 11px;
+}
+
+/* Робимо так, щоб перший роздільник (поточна версія) не мав відступу зверху */
+.log-item:first-child .history-separator {
+    margin-top: 0;
+}		
 </style>
 </head>
 <body class="holiday-modee"> 
@@ -5988,3 +6011,4 @@ document.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
