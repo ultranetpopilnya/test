@@ -26,7 +26,6 @@
     background-color: var(--input-bg-color);
     border: 1px solid var(--input-border-color);
     border-radius: 50px; /* Кругла форма */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     
     /* Ховаємо все, що не влазить у 38px */
     overflow: hidden;
@@ -36,7 +35,6 @@
         width 0.4s cubic-bezier(0.25, 1, 0.5, 1),
         max-height 0.4s cubic-bezier(0.25, 1, 0.5, 1),
         border-radius 0.4s ease,
-        box-shadow 0.3s ease;
         
     cursor: default;
     display: flex;
@@ -48,10 +46,9 @@
     width: 340px;          
     
     /* Знімаємо обмеження висоти (ставимо велике значення з запасом) */
-    max-height: 400px; 
+    max-height: 800px; 
     
     border-radius: 16px; /* Прямокутні кути */
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
     border-color: var(--primary-accent-color);
     
     /* Дозволяємо скрол, якщо контенту ну дуже багато */
@@ -117,8 +114,22 @@
 .badge.fix { background-color: var(--danger-color); }
 .badge.upd { background-color: var(--primary-accent-color); }
 
-/* Темна тема */
-body.dark .version-pill { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+/* 1. Колір рамки (бордера) при наведенні */
+body.dark .version-pill:hover {
+    border-color: var(--secondary-accent-color); /* Оранжевий бордюр */
+}
+
+/* 2. Колір номера версії в ШАПЦІ (найновіша) */
+body.dark .version-number {
+    color: var(--secondary-accent-color);
+}
+
+/* 3. Колір роздільників (старі версії в списку) */
+body.dark .history-separator {
+    color: var(--secondary-accent-color);       /* Текст версії оранжевий */
+    border-bottom-color: rgba(230, 162, 46, 0.3); /* Лінія під нею напівпрозора оранжева */
+}
+
 	/* === НОВИЙ, НАДІЙНИЙ СТИЛЬ ДЛЯ ВМІСТУ ВКЛАДОК === */
 
 .content-card {
@@ -6050,10 +6061,3 @@ document.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
