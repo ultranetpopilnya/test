@@ -23,10 +23,8 @@
     
     background-color: var(--input-bg-color); /* Або rgba(255,255,255,0.9) для ефекту скла */
     border: 1px solid var(--input-border-color);
-    border-radius: 50px;
+    border-radius: 16px;
     
-    /* Додаємо глибину тінню */
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
     /* Ефект матового скла (працює в сучасних браузерах) */
     backdrop-filter: blur(8px);
     
@@ -34,7 +32,7 @@
     
     /* Пружиниста анімація розкриття */
     transition: 
-        width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), /* Ефект пружини */
+        width 0.5s cubic-bezier(0.34, 1.25, 0.64, 1), /* Ефект пружини */
         max-height 0.5s cubic-bezier(0.25, 1, 0.5, 1),
         border-radius 0.4s ease,
         box-shadow 0.4s ease,
@@ -52,10 +50,7 @@
     
     border-radius: 16px; 
     border-color: var(--primary-accent-color);
-    
-    /* Світіння при розкритті */
-    box-shadow: 0 15px 30px rgba(0, 123, 255, 0.15);
-    
+       
     overflow-y: auto;
 }
 
@@ -94,6 +89,8 @@
     width: 270px; 
     min-width: 270px;
 }
+
+/* При наведенні текст виїжджає на місце */
 .version-pill:hover .version-content { 
     opacity: 1; 
     transform: translateX(0);
@@ -156,12 +153,27 @@ body.dark .version-number {
 
 /* Список змін */
 .version-log { list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-color); }
-.log-item { margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px; }
+/* Список змін (Grid для ідеального вирівнювання) */
+.log-item { 
+    margin-bottom: 8px; 
+    display: grid; 
+    grid-template-columns: 34px 1fr; /* Колонки: 34px під бейдж, решта під текст */
+    gap: 10px; /* Відступ між бейджем і текстом */
+    align-items: start; 
+}
 
 /* Бейджі */
 .badge {
-    font-size: 10px; font-weight: 800; padding: 2px 5px;
-    border-radius: 4px; color: #fff; flex-shrink: 0; margin-top: 2px;
+    font-size: 10px; 
+    font-weight: 800; 
+    padding: 2px 0; /* Бокові відступи нуль, бо є фіксована ширина */
+    border-radius: 4px; 
+    color: #fff; 
+    margin-top: 2px;
+    
+    width: 100%; /* Займає всі виділені 34px */
+    text-align: center; /* Текст всередині бейджа по центру */
+    justify-self: end; /* Вирівнює весь блок бейджа по правому краю своєї колонки */
 }
 .badge.new { background-color: var(--success-color); }
 .badge.fix { background-color: var(--danger-color); }
@@ -3298,9 +3310,6 @@ body.dark .scroll-nav-btn.visible:hover {
     
     <!-- Номер версії, який підставляє JS -->
     <span id="ver-number" class="version-number">...</span>
-    
-    <!-- Дату ми прибрали, тому цей span можна видалити або залишити пустим -->
-    <span id="ver-date" class="version-date"></span>
 </div>
         
         <!-- Сюди JS вставить список змін (li) -->
