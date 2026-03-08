@@ -151,29 +151,36 @@ body.dark .version-number {
 .version-number { font-weight: 700; font-family: 'Fira Code', monospace; color: var(--text-color); font-size: 14px; }
 .version-date { font-size: 11px; color: var(--tab-inactive-text); }
 
-/* Список змін */
-.version-log { list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-color); }
-/* Список змін (Grid для ідеального вирівнювання) */
+/* Список змін (Задаємо точну висоту рядка тексту = 18px) */
+.version-log { 
+    list-style: none; 
+    padding: 0; 
+    margin: 0; 
+    font-size: 13px; 
+    line-height: 18px; /* Фіксована висоту рядка */
+    color: var(--text-color); 
+}
+
 .log-item { 
     margin-bottom: 8px; 
     display: grid; 
-    grid-template-columns: 34px 1fr; /* Колонки: 34px під бейдж, решта під текст */
-    gap: 10px; /* Відступ між бейджем і текстом */
-    align-items: start; 
+    grid-template-columns: 34px 1fr; 
+    gap: 10px; 
+    align-items: start; /* Притискаємо обох до самої верхньої лінії */
 }
 
 /* Бейджі */
 .badge {
     font-size: 10px; 
     font-weight: 800; 
-    padding: 2px 0; /* Бокові відступи нуль, бо є фіксована ширина */
+    line-height: 12px; /* Висота тексту всередині значка */
+    padding: 3px 0;    /* 12px (текст) + 3px (верх) + 3px (низ) = рівно 18px! */
     border-radius: 4px; 
     color: #fff; 
-    margin-top: 2px;
     
-    width: 100%; /* Займає всі виділені 34px */
-    text-align: center; /* Текст всередині бейджа по центру */
-    justify-self: end; /* Вирівнює весь блок бейджа по правому краю своєї колонки */
+    width: 100%; 
+    text-align: center; 
+    margin-top: 0; /* Видаляємо старий відступ, який псував вирівнювання */
 }
 .badge.new { background-color: var(--success-color); }
 .badge.fix { background-color: var(--danger-color); }
@@ -6127,3 +6134,4 @@ document.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
+
