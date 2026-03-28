@@ -235,7 +235,7 @@ function generateAlternativeLogin(buttonElement) {
     const originalName = resultItem.querySelector('.original-name')?.textContent || 'Вручну';
 
     navigator.clipboard.writeText(loginText).then(() => {
-        button.innerHTML = '<i class="fas fa-check"></i>';
+        button.innerHTML = '<i class="fa-solid fa-check"></i>';
         button.classList.add('copied');
         
         showNotification(`Логін скопійовано: ${loginText}`);
@@ -567,202 +567,226 @@ function areDatesInDefaultState() {
         resultDisplay.innerHTML = `<span class="total-hours-text">Кількість годин (загальна): ${totalHoursText}</span><br><span class="duration-text">Період (повний): ${durationText}</span><br><span class="total-days-text">Загальна кількість (днів): ${totalDaysInclusive} ${dayWord}.</span>`;
     }
     
-    const COMMANDS = {
-        gpon: [
-            { command: 'show gpon onu uncfg', description: 'Показати незареєстровані ONU на PON' }, 
-            { command: 'show pon power attenuation gpon-onu_1/1/1:1', description: 'Показати сигнал ONU абонента' },
-			{ command: 'show pon power onu-rx gpon-olt_1/1/1', description: 'Показати сигнали всіх ONU на PON' },	
-            { command: 'show gpon onu state gpon-olt_1/1/1', description: 'Показати кількість активних та зареєстрованих ONU на порту 1/1/1' },		
-            { command: 'show running-config interface gpon-onu_1/1/1:1', description: 'Показати конфіг ONU' }, 
-            { command: 'show gpon onu detail-info gpon-onu_1/1/1:1', description: 'Показати логи падіння та підняття ONU' }, 
-            { command: 'show clock', description: 'Показати час на OLT' }, 
-            { command: 'show gpon remote-onu interface eth gpon-onu_1/1/1:1', description: 'Перевірка зєднання між ONU та роутером (швидкість)' }, 
-            { command: 'show mac gpon onu gpon-onu_1/1/1:1', description: 'Показати Mac адресу роутера' }, 
-            { command: 'show ip dhcp snooping dynamic port pon gpon-onu_1/1/1:1 vport 1', description: 'Показати Mac адресу, IP та VLAN роутера' }, 
-            { command: 'show ip dhcp snooping port gpon-onu_1/1/1:1', description: 'Показати Mac адресу, IP та VLAN роутера' }, 
-            { command: 'show pon power onu-rx gpon-olt_1/1/1', description: 'Показати сигнали всіх ONU на порту' },
-			{ command: 'show gpon onu by sn abcd.efgh.1234', description: 'Показати порт на якому зареєстрована ONU' },
+    let COMMANDS = { gpon: [], epon: [], bdcom: [] }; // Тепер це порожній об'єкт, який заповниться сам
+    // === РОЗУМНИЙ ПАРСЕР КОМАНД ===
+function loadCommandsFromFile() {
+    fetch('commands.txt?v=' + Date.now())
+        .then(response => {
+            if (!response.ok) throw new Error("Файл команд не знайдено");
+            return response.text();
+        })
+        .then(text => {
+            let currentType = null;
+            let lastCommand = null;
+            const lines = text.split('\n');
             
-            // --- ОСЬ ТУТ ЗМІНИ ДЛЯ GPON ---
-            { 
-                command: 'conf t', 
-                description: 'Зайти в налаштування OLT (Натисніть для списку)', 
-                subCommands: [
-                    { command: 'ip dhcp snooping clear pon abcd.efgh.1234 vlan 111 gpon-onu_1/1/1:1 vport 1', description: 'Очистка сесії' },
-                    { command: 'ip dhcp snooping clear abcd.efgh.1234 vlan 111', description: 'Очистка сесії' },
-                    { command: 'interface gpon-onu_1/1/1:1', description: 'Зайти в інтерфейс ONU' },
-					{ command: 'no onu 111', description: 'Видалення ONU з PON' },
-					{ command: 'onu 111 type GPON-1GE sn PTNHUYLO', description: 'Реєстрація ONU за серійним номером на PON' },
-					{ command: 'pon-onu-mng gpon-onu_1/1/1:1', description: 'Конфігурація ONU після реєстрації' },
-					{ command: 'reboot', description: 'Перезавантаження ONU віддалено. Використовується після pon-onu-mng' },
-					{ command: 'interface eth eth_0/1 state lock/unlock', description: 'Очистка сесії без відєднування ethernet кабелю. Використовується після pon-onu-mng' },
-					
-                ]
+            COMMANDS = { gpon: [], epon: [], bdcom: [] };
+
+            lines.forEach(line => {
+                line = line.trim();
+                
+                if (!line || line.startsWith('#')) return; 
+
+                const sectionMatch = line.match(/^\[(.*)\]$/);
+                if (sectionMatch) {
+                    currentType = sectionMatch[1].toLowerCase();
+                    if (!COMMANDS[currentType]) COMMANDS[currentType] = [];
+                    lastCommand = null; 
+                    return;
+                }
+
+                if (!currentType) return;
+
+                // === НОВЕ: Перевірка на постійно розгорнутий список ===
+                const isSub = line.startsWith('>');
+                let isAlwaysExpanded = false;
+                let actualLine = line;
+
+                if (isSub) {
+                    actualLine = line.substring(1).trim();
+                } else if (line.startsWith('*')) {
+                    isAlwaysExpanded = true;
+                    actualLine = line.substring(1).trim();
+                }
+
+                let splitIndex = actualLine.indexOf('::');
+                let cmdText, cmdDesc;
+                
+                if (splitIndex !== -1) {
+                    cmdText = actualLine.substring(0, splitIndex).trim();
+                    cmdDesc = actualLine.substring(splitIndex + 2).trim();
+                } else {
+                    cmdText = actualLine;
+                    cmdDesc = "";
+                }
+
+                // === НОВЕ: Зберігаємо статус alwaysExpanded ===
+                const cmdObj = { command: cmdText, description: cmdDesc, alwaysExpanded: isAlwaysExpanded };
+
+                if (isSub && lastCommand) {
+                    if (!lastCommand.subCommands) lastCommand.subCommands = [];
+                    lastCommand.subCommands.push(cmdObj);
+                } else {
+                    cmdObj.subCommands = [];
+                    COMMANDS[currentType].push(cmdObj);
+                    lastCommand = cmdObj; 
+                }
+            });
+
+            const activeTab = localStorage.getItem('activeTab');
+            if (activeTab === 'gpon-commands') {
+                const deviceSelect = document.getElementById('device-type');
+                if (deviceSelect) displayCommands(deviceSelect.value);
             }
-        ],
-        
-        epon: [
-            { command: 'show onu unauthentication', description: 'Пошук незареєстрованих ONU' }, 
-            { command: 'show epon onu state epon-olt_1/1/1', description: 'Показати всі зареєстровані ONU на OLT' }, 
-            { command: 'show running-config interface epon-onu_1/1/1:1', description: 'Показати конфіг ONU' }, 
-            { command: 'show onu detail-info epon-onu_1/1/1:1', description: 'Показати логи падіння та підняття ONU' }, 
-            { command: 'show pon power attenuation epon-onu_1/1/1:1', description: 'Показати сигнал ONU абонента' },
-			{ command: 'show pon power onu-rx epon-olt_1/1/1', description: 'Показати сигнали всіх ONU на PON' },		
-            { command: 'show mac epon onu epon-onu_1/1/1:1', description: 'Показати Mac адресу роутера' }, 
-            { command: 'show ip dhcp snooping port epon-onu_1/1/1:1', description: 'Показати Mac адресу, IP та VLAN роутера' },
-            
-            // --- ОСЬ ТУТ ЗМІНИ ДЛЯ EPON ---
-            { 
-                command: 'conf t', 
-                description: 'Зайти в налаштування OLT (Натисніть для списку)',
-                subCommands: [
-                     { command: 'interface epon-onu_1/1/1:1', description: 'Зайти в інтерфейс ONU' },
-					 { command: 'no onu 111', description: 'Видалення ONU з PON' },
-					 { command: 'onu 111 type  NTS-101 mac abcd.efgh.1234', description: 'Реєстрація ONU за MAC на PON' },
-					 { command: 'interface epon-onu_1/1/1:1', description: 'Зайти в інтерфейс ONU' },
-					 { command: 'pon-onu-mng epon-onu_1/1/1:1', description: 'Конфігурація ONU після реєстрації' },
-                ]
-            }
-        ],
-        
-        bdcom: [
-            { command: 'show epon active-onu interface ePON 0/1', description: 'Показати активні ONU на 4 порту' },
-            { command: 'show epon interface ePON 0/1:11 onu ctc optical-transceiver-diagnosis', description: 'Перевірка сигналу ONU' },
-            { command: 'show epon onu-information mac-address abcd.efgh.1234', description: 'Пошук ONU за Mac адресою' },
-            { command: 'show mac address-table interface ePON 0/1:11', description: 'Показати Mac адресу обладнання після ONU' },
-            { command: 'show epon interface ePON 0/1:11 onu port 1 state', description: 'Показати зєднання між ONU та роутером' },
-            { command: 'show epon onu-information | include abcd', description: 'Пошук ONU по частині Mac' },	
-            { command: 'show epon onu-information mac-address abcd.efgh.1234', description: 'Пошук ONU по Mac' },
-			{ command: 'show epon onu-ctc-optical-transceiver-diagnosis interface ePON 0/1', description: 'Показати сигнал PON' },
-			{ command: 'write all', description: 'Зберегти внесені зміни на OLT' },
-             // --- ОСЬ ТУТ ЗМІНИ ДЛЯ BDCOM ---
-            { 
-                command: 'conf', 
-                description: 'Зайти в налаштування OLT',
-                subCommands: [
-                    { command: 'interface ePON 0/1:11', description: 'Зайти в інтерфейс ONU' },
-					{ command: 'no epon bind-onu mac abcd.efgh.1234', description: 'Видалення ONU з PON' },
-                ]
-            }
-        ],
-    };
+        })
+        .catch(err => {
+            // ... (помилка залишається як була)
+            console.error("Помилка завантаження команд:", err);
+            document.getElementById('command-output').innerHTML = 
+                '<p style="text-align: center; color: #dc3545; padding: 20px;">Не вдалося завантажити файл commands.txt</p>';
+        });
+}
 
     const commandOutput = document.getElementById('command-output');
     const notification = document.getElementById('notification');
     
     function displayCommands(deviceType) {
-        commandOutput.innerHTML = ''; 
-        const commands = COMMANDS[deviceType] || [];
-        
-        if (commands.length === 0) {
-            commandOutput.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">Команди для цього типу обладнання ще не додано.</p>';
-            return;
+    const commandOutput = document.getElementById('command-output');
+    commandOutput.innerHTML = ''; 
+    const commands = COMMANDS[deviceType] || [];
+    
+    const mainContainer = document.querySelector('.container[data-content="gpon-commands"]');
+    const isExpanded = commands.length > 15; 
+
+    if (mainContainer) {
+        if (isExpanded) {
+            mainContainer.classList.add('expanded-layout');
+            // Додаємо спеціальний клас для CSS-колонок
+            commandOutput.classList.add('two-columns');
+        } else {
+            mainContainer.classList.remove('expanded-layout');
+            commandOutput.classList.remove('two-columns');
         }
+    }
 
-        commands.forEach(item => {
-            if (!item.command && !item.description) return;
+    if (commands.length === 0) {
+        commandOutput.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">Команди для цього типу обладнання ще не додано.</p>';
+        return;
+    }
 
-            const hasSubCommands = item.subCommands && item.subCommands.length > 0;
+    commands.forEach((item) => {
+        if (!item.command && !item.description) return;
 
-            // 1. Створюємо головний рядок
-            const commandDiv = document.createElement('div');
-            commandDiv.classList.add('command-item');
-            commandDiv.setAttribute('data-command', item.command); 
-            
-            // Якщо є підкоманди, додаємо спец-клас для CSS
-            if (hasSubCommands) {
-                commandDiv.classList.add('has-subcommands');
+        const hasSubCommands = item.subCommands && item.subCommands.length > 0;
+        const isAlwaysExpanded = item.alwaysExpanded; // === НОВЕ ===
+
+        const commandDiv = document.createElement('div');
+        commandDiv.classList.add('command-item');
+        commandDiv.setAttribute('data-command', item.command); 
+        
+        if (hasSubCommands) {
+            commandDiv.classList.add('has-subcommands');
+            // === НОВЕ: Логіка підказок та класів для статичних заголовків ===
+            if (isAlwaysExpanded) {
+                commandDiv.classList.add('static-header');
+                commandDiv.title = "";
+            } else {
                 commandDiv.title = "Натисніть на рядок, щоб розгорнути список. Натисніть на текст команди, щоб скопіювати.";
             }
+        }
 
-            // 2. Текст команди (Ліва частина)
-            const commandTextSpan = document.createElement('span');
-            commandTextSpan.classList.add('command-text');
-            commandTextSpan.textContent = item.command;
-            
-            // 3. Опис (Права частина)
-            const commandDescriptionSpan = document.createElement('span');
-            commandDescriptionSpan.classList.add('command-description');
-            commandDescriptionSpan.textContent = `(${item.description})`;
+        const commandTextSpan = document.createElement('span');
+        commandTextSpan.classList.add('command-text');
+        commandTextSpan.textContent = item.command;
+        
+        const commandDescriptionSpan = document.createElement('span');
+        commandDescriptionSpan.classList.add('command-description');
+        commandDescriptionSpan.textContent = item.description;
 
-            commandDiv.appendChild(commandTextSpan);
-            commandDiv.appendChild(commandDescriptionSpan);
+        commandDiv.appendChild(commandTextSpan);
+        commandDiv.appendChild(commandDescriptionSpan);
 
-            let subListDiv = null;
+        let subListDiv = null;
 
-            // 4. Логіка для команд з підменю (наприклад, conf t)
-            if (hasSubCommands) {
-                // Додаємо стрілочку
+        if (hasSubCommands) {
+            // === НОВЕ: Додаємо стрілочку ТІЛЬКИ якщо список згортається ===
+            if (!isAlwaysExpanded) {
                 const chevron = document.createElement('i');
                 chevron.className = 'fas fa-chevron-down chevron-icon';
                 commandDiv.appendChild(chevron);
+            }
 
-                // Створюємо контейнер списку
-                subListDiv = document.createElement('div');
-                subListDiv.className = 'sub-command-list';
+            subListDiv = document.createElement('div');
+            subListDiv.className = 'sub-command-list';
+            
+            // === НОВЕ: Клас для постійно відкритого списку ===
+            if (isAlwaysExpanded) {
+                subListDiv.classList.add('always-open');
+            }
 
-                // Наповнюємо список
-                item.subCommands.forEach(subItem => {
-                    const subDiv = document.createElement('div');
-                    subDiv.className = 'sub-command-item';
-                    
-                    subDiv.innerHTML = `
-                        <span class="command-text" style="font-family: 'Fira Code', monospace; font-weight: 600;">${subItem.command}</span>
-                        <span class="command-description" style="font-size: 0.9em; color: #888;">(${subItem.description})</span>
-                    `;
-                    
-                    // Клік по підпункту -> копіювання
-                    subDiv.addEventListener('click', (e) => {
-                        e.stopPropagation(); 
-                        copyCommandToClipboard(subItem.command);
-                    });
-                    
-                    subListDiv.appendChild(subDiv);
-                });
-
-                // --- ГОЛОВНА ЗМІНА ЛОГІКИ ---
+            item.subCommands.forEach(subItem => {
+                const subDiv = document.createElement('div');
+                subDiv.className = 'sub-command-item';
                 
-                // А) Клік по ТЕКСТУ команди -> ТІЛЬКИ копіювання
-                commandTextSpan.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Зупиняємо подію, щоб список не відкрився/закрився
-                    copyCommandToClipboard(item.command);
+                subDiv.innerHTML = `
+                    <span class="command-text" style="font-family: 'Fira Code', monospace; font-weight: 600;">${subItem.command}</span>
+                    <span class="command-description" style="font-size: 0.9em; color: #888;">${subItem.description}</span>
+                `;
+                
+                subDiv.addEventListener('click', (e) => {
+                    e.stopPropagation(); 
+                    copyCommandToClipboard(subItem.command);
                 });
+                
+                subListDiv.appendChild(subDiv);
+            });
 
-                // Б) Клік по РЯДКУ (все інше) -> ТІЛЬКИ відкриття/закриття
+            commandTextSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copyCommandToClipboard(item.command);
+            });
+
+            // Обробник кліку для всього рядка
+            if (!isAlwaysExpanded) {
+                // Якщо це звичайний список - клік розгортає/згортає його
                 commandDiv.addEventListener('click', (e) => {
-                    // Копіювання НЕ відбувається
-                    const isExpanded = commandDiv.classList.toggle('expanded');
-                    subListDiv.classList.toggle('open', isExpanded);
+                    const isExpandedState = commandDiv.classList.toggle('expanded');
+                    subListDiv.classList.toggle('open', isExpandedState);
 
-                    // --- ДОДАНО: РОЗУМНИЙ СКРОЛ ---
-                    if (isExpanded) {
-                        // Коли відкриваємо: чекаємо 250мс (поки йде CSS анімація розкриття)
-                        // і плавно підтягуємо НИЗ списку, щоб було видно всі команди
+                    if (isExpandedState) {
                         setTimeout(() => {
                             subListDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }, 250);
                     } else {
-                        // Коли закриваємо: фокус повертається на головну команду,
-                        // щоб екран не залишався "висіти" на порожньому місці
                         setTimeout(() => {
                             commandDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }, 250);
                     }
                 });
-
             } else {
-                // 5. Логіка для звичайних команд (без підменю) -> Стара поведінка
+                // === ВИПРАВЛЕННЯ: Якщо це статичний заголовок, клік в БУДЬ-ЯКЕ МІСЦЕ рядка копіює команду ===
                 commandDiv.addEventListener('click', () => {
                     copyCommandToClipboard(item.command);
                 });
             }
 
-            commandOutput.appendChild(commandDiv);
-            if (subListDiv) {
-                commandOutput.appendChild(subListDiv);
-            }
-        });
-    }
+        } else {
+            commandDiv.addEventListener('click', () => {
+                copyCommandToClipboard(item.command);
+            });
+        }
+
+        const groupWrapper = document.createElement('div');
+        groupWrapper.className = 'command-group-wrapper';
+        
+        groupWrapper.appendChild(commandDiv);
+        if (subListDiv) {
+            groupWrapper.appendChild(subListDiv);
+        }
+
+        commandOutput.appendChild(groupWrapper);
+    });
+}
 
     // Функція копіювання залишається без змін (з попереднього кроку)
     async function copyCommandToClipboard(text) {
@@ -1062,7 +1086,7 @@ function initDraggableAndResizable(element) {
     // --- КНОПКИ ---
     
     const copyButton = document.createElement('button');
-    copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+    copyButton.innerHTML = '<i class="fa-solid fa-copy"></i>';
     copyButton.title = 'Копіювати текст';
     copyButton.className = 'copy-template-btn';
     copyButton.onclick = () => {
@@ -1077,7 +1101,7 @@ function initDraggableAndResizable(element) {
     };
     
     const pasteLoginButton = document.createElement('button');
-    pasteLoginButton.innerHTML = '<i class="fas fa-paste"></i>';
+    pasteLoginButton.innerHTML = '<i class="fa-solid fa-paste"></i>';
     pasteLoginButton.title = 'Вставити логін';
     pasteLoginButton.className = 'paste-login-btn';
     pasteLoginButton.onclick = () => {
@@ -1120,7 +1144,7 @@ function initDraggableAndResizable(element) {
 
    // === КНОПКА ПОШУКУ (НЕЗАЛЕЖНА) ===
     const searchToggleButton = document.createElement('button');
-    searchToggleButton.innerHTML = '<i class="fas fa-search"></i>';
+    searchToggleButton.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i>';
     searchToggleButton.title = 'Пошук і заміна тексту';
     searchToggleButton.style.backgroundColor = '#6f42c1'; 
     searchToggleButton.style.color = 'white';
@@ -1148,7 +1172,7 @@ function initDraggableAndResizable(element) {
     };
 
     const deleteButton = document.createElement('button');
-    deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>';
+    deleteButton.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
     deleteButton.title = 'Видалити шаблон';
     deleteButton.className = 'delete-template-btn';
     deleteButton.onclick = () => {
@@ -1174,7 +1198,7 @@ function initDraggableAndResizable(element) {
             
             <!-- КНОПКА ОБМІНУ -->
             <button class="swap-inputs-btn" title="Поміняти місцями">
-                <i class="fas fa-exchange-alt"></i>
+                <i class="fa-solid fa-right-left"></i>
             </button>
             
             <input type="text" class="input-replace" placeholder="Замінити..." value="${savedReplace}">
@@ -1863,6 +1887,9 @@ document.getElementById('clear-history-btn').addEventListener('click', () => {
     initTabDragging();
     setupTabs();
 	loadHistory();
+    loadCommandsFromFile();
+    loadCalcAutoClearState();
+
 // Обробник для кнопки "Поточна дата"
 document.getElementById('set-start-now-btn').addEventListener('click', () => {
     const now = new Date();
@@ -2229,10 +2256,12 @@ function calcUpdateDisplay() {
     }
     
     if(prevDisplay) {
-        // Форматуємо масив у красивий рядок для верхнього екрану
         let exprStr = calcExpression.join(' ').replace(/\*/g, '×').replace(/\//g, '÷');
         prevDisplay.innerText = exprStr;
     }
+    
+    // ОСЬ ЦЕЙ РЯДОК: Скидає 7 секунд при кожній зміні на екрані
+    startCalcAutoClearTimer();
 }
 
 function calcAppend(num) {
@@ -2398,6 +2427,82 @@ function copyCalcResult() {
     setTimeout(() => btn.innerHTML = originalHtml, 1200);
 }
 
+/* === АВТООЧИЩЕННЯ ЕКРАНУ КАЛЬКУЛЯТОРА (7 СЕКУНД БЕЗ ДІЯЛЬНОСТІ) === */
+let isCalcAutoClearEnabled = false;
+let calcAutoClearTimeout = null;
+
+function toggleCalcAutoClear() {
+    const btn = document.getElementById('calc-auto-clear-btn');
+    isCalcAutoClearEnabled = !isCalcAutoClearEnabled; 
+    
+    // ЗБЕРІГАЄМО СТАН:
+    localStorage.setItem('calcAutoClearEnabled', isCalcAutoClearEnabled);
+    
+    btn.classList.toggle('active', isCalcAutoClearEnabled);
+    
+    if (isCalcAutoClearEnabled) {
+        // Ваша логіка запуску таймера...
+    } else {
+        if (calcAutoClearTimeout) clearTimeout(calcAutoClearTimeout);
+    }
+}
+
+function loadCalcAutoClearState() {
+    const savedState = localStorage.getItem('calcAutoClearEnabled');
+    const btn = document.getElementById('calc-auto-clear-btn');
+    
+    if (savedState === 'true') {
+        isCalcAutoClearEnabled = true;
+        if (btn) btn.classList.add('active');
+        // Якщо потрібно, щоб таймер відразу почав працювати:
+        // startCalcAutoClearTimer(); 
+    } else {
+        isCalcAutoClearEnabled = false;
+        if (btn) btn.classList.remove('active');
+    }
+}
+
+// Функція, яка перезапускає таймер при кожній зміні на екрані
+function startCalcAutoClearTimer() {
+    if (!isCalcAutoClearEnabled) return;
+
+    // 1. Зупиняємо старий таймер (користувач щось натиснув)
+    clearTimeout(calcAutoClearTimeout);
+    
+    // 2. Якщо на екрані є введені цифри (не 0), починаємо відлік 7 секунд
+    if (calcCurrent !== '0' && calcCurrent !== 'Помилка') {
+        
+        calcAutoClearTimeout = setTimeout(() => {
+            // Перевіряємо ще раз через 7 секунд, чи екран досі не пустий
+            if (calcCurrent !== '0' && calcCurrent !== 'Помилка') {
+                calcCurrent = '0'; // Стираємо тільки поточні цифри
+                calcUpdateDisplay(); // Оновлюємо візуал
+                
+                // Показуємо галочку
+                showAutoClearSuccess();
+            }
+        }, 7000);
+    }
+}
+
+// Візуальна зміна іконки на галочку і назад
+function showAutoClearSuccess() {
+    const btn = document.getElementById('calc-auto-clear-btn');
+    const icon = document.getElementById('calc-auto-clear-icon');
+    
+    if (!btn || !icon) return;
+
+    // Міняємо іконку на галочку і додаємо зелений колір
+    icon.className = 'fas fa-check';
+    btn.classList.add('just-cleared');
+
+    // Через 1.5 секунди повертаємо гумку
+    setTimeout(() => {
+        icon.className = 'fas fa-eraser';
+        btn.classList.remove('just-cleared');
+    }, 1500);
+}
+
 /* === ЛОГІКА ІСТОРІЇ === */
 function calcToggleHistory() {
     const panel = document.getElementById('calc-history-panel');
@@ -2533,8 +2638,9 @@ document.addEventListener('keydown', (e) => {
                                 <span>${desc}</span>
                             `;
                         } else {
-                            li.innerHTML = `<span>${changeText}</span>`;
-                        }
+    // Додаємо порожній span, щоб текст інструкції змістився вправо (у другу колонку сітки)
+    li.innerHTML = `<span></span><span class="log-sub-description">${changeText}</span>`;
+}
                         listContainer.appendChild(li);
                     });
                 });
@@ -2545,4 +2651,133 @@ document.addEventListener('keydown', (e) => {
             });
     }
 
+
     document.addEventListener('DOMContentLoaded', initChangelog);
+
+// === КЕРУВАННЯ БОКОВИМИ ПІГУЛКАМИ ===
+document.addEventListener('DOMContentLoaded', () => {
+    const allPills = document.querySelectorAll('.version-pill, .extension-pill');
+
+    document.addEventListener('click', (e) => {
+        // 1. Шукаємо, чи був клік всередині пігулки взагалі
+        const clickedPill = e.target.closest('.version-pill, .extension-pill');
+
+        if (clickedPill) {
+            // Перевіряємо, чи ця пігулка зараз відкрита
+            const isOpen = clickedPill.classList.contains('is-open');
+            
+            // Перевіряємо, чи клік припав САМЕ НА ІКОНКУ
+            const clickedIcon = e.target.closest('.version-emoji, .extension-emoji');
+
+            if (isOpen) {
+                // Якщо пігулка ВЖЕ ВІДКРИТА...
+                if (clickedIcon) {
+                    // ...і ми клікнули по іконці -> ЗАКРИВАЄМО її
+                    clickedPill.classList.remove('is-open');
+                }
+                // Якщо клікнули не по іконці (а по тексту, скролу, кнопці) -> нічого не робимо (залишається відкритою)
+                
+            } else {
+                // Якщо пігулка БУЛА ЗАКРИТА -> відкриваємо її (і закриваємо інші)
+                allPills.forEach(p => p.classList.remove('is-open'));
+                clickedPill.classList.add('is-open');
+            }
+            
+        } else {
+            // 2. Якщо клік був ЗА МЕЖАМИ пігулок (по фону сайту) -> закриваємо всі
+            allPills.forEach(p => p.classList.remove('is-open'));
+        }
+    });
+});
+
+
+// === АВТОМАТИЧНЕ ОТРИМАННЯ ВЕРСІЇ РОЗШИРЕННЯ ТА СПОВІЩЕННЯ ===
+document.addEventListener('DOMContentLoaded', () => {
+    
+    const MANIFEST_URL = 'https://raw.githubusercontent.com/ultranetpopilnya/UltraEnergy-SMS-Tool/refs/heads/main/manifest.json';
+    
+    const badgeElement = document.querySelector('.extension-version-badge');
+    const extensionPill = document.querySelector('.extension-pill');
+    const sidePillsContainer = document.querySelector('.side-pills-container');
+
+    if (!extensionPill) return;
+
+    async function fetchExtensionVersion() {
+        try {
+            const response = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, {
+                cache: 'no-store'
+            });
+            
+            if (!response.ok) throw new Error('Не вдалося отримати дані з GitHub');
+
+            const manifest = await response.json();
+            
+            if (manifest && manifest.version) {
+                const fetchedVersion = manifest.version;
+                
+                // 1. Оновлюємо внутрішній бейдж розширення (який видно при розкритті)
+                if (badgeElement) {
+                    badgeElement.textContent = `v${fetchedVersion}`;
+                }
+
+                // 2. Логіка розумного сповіщення
+                // Дістаємо версію, яку користувач клікав/бачив востаннє
+                const storedVersion = localStorage.getItem('knownExtensionVersion');
+
+                // Якщо це найперший візит на сайт - просто запам'ятовуємо, не блимаємо
+                if (!storedVersion) {
+                    localStorage.setItem('knownExtensionVersion', fetchedVersion);
+                } 
+                // Якщо версія змінилась - малюємо сповіщення!
+                else if (storedVersion !== fetchedVersion) {
+                    showUpdateAlert(fetchedVersion);
+                }
+            }
+
+        } catch (error) {
+            console.error('Помилка отримання версії розширення:', error);
+        }
+    }
+
+    function showUpdateAlert(newVersion) {
+        // Додаємо клас для зеленої пульсації пігулки
+        extensionPill.classList.add('has-new-update');
+
+        // Створюємо зовнішній бейдж "Нова версія"
+        const alertBadge = document.createElement('div');
+        alertBadge.className = 'update-notify-badge';
+        alertBadge.innerHTML = `🔥 Нова версія: v${newVersion}`;
+        
+        // Вираховуємо висоту, щоб бейдж з'явився рівно навпроти пігулки
+        // offsetTop - це відступ пігулки від верху контейнера. Додаємо 11px для центрування.
+        const pillTopPosition = extensionPill.offsetTop;
+        alertBadge.style.top = `${pillTopPosition + 11}px`;
+
+        // Вставляємо бейдж у контейнер (поруч із пігулками)
+        if (sidePillsContainer) {
+            sidePillsContainer.appendChild(alertBadge);
+        }
+
+        // Вішаємо одноразовий слухач: коли користувач клікне на пігулку - прибираємо сповіщення
+        extensionPill.addEventListener('click', function onPillClick() {
+            if (extensionPill.classList.contains('has-new-update')) {
+                // Вимикаємо світіння
+                extensionPill.classList.remove('has-new-update');
+                
+                // Запускаємо анімацію зникнення бейджа
+                alertBadge.classList.add('fade-out');
+                
+                // Оновлюємо пам'ять браузера (користувач ознайомився з цією версією)
+                localStorage.setItem('knownExtensionVersion', newVersion);
+                
+                // Видаляємо бейдж із коду після завершення анімації (через 300мс)
+                setTimeout(() => alertBadge.remove(), 300);
+            }
+            // Видаляємо цей слухач, щоб він не спрацьовував при наступних кліках
+            extensionPill.removeEventListener('click', onPillClick);
+        });
+    }
+
+    // Запускаємо перевірку
+    fetchExtensionVersion();
+});

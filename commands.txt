@@ -1,0 +1,77 @@
+# ==========================================
+# ФАЙЛ КОМАНД ДЛЯ ОБЛАДНАННЯ
+# Формат: команда :: опис
+# Для підкоманд ставте знак > на початку рядка. * для списку який розгорнутий постійно
+# ==========================================
+
+[gpon]
+show gpon onu uncfg :: Показати незареєстровані ONU на OLT
+show pon power attenuation gpon-onu_1/1/1:1 :: Показати сигнал ONU абонента
+show pon power onu-rx gpon-olt_1/1/1 :: Показати сигнали всіх ONU на PON
+show gpon onu state gpon-olt_1/1/1 :: Показати кількість активних та зареєстрованих ONU на порту
+show running-config interface gpon-onu_1/1/1:1 :: Показати конфіг ONU
+show gpon onu detail-info gpon-onu_1/1/1:1 :: Показати логи падіння та підняття ONU
+show clock :: Показати час на OLT
+show gpon remote-onu interface eth gpon-onu_1/1/1:1 :: Перевірка зєднання між ONU та роутером (швидкість)
+show mac gpon onu gpon-onu_1/1/1:1 :: Показати Mac адресу роутера
+show ip dhcp snooping dynamic port pon gpon-onu_1/1/1:1 vport 1 :: Показати Mac адресу, IP та VLAN роутера
+show ip dhcp snooping port gpon-onu_1/1/1:1 :: Показати Mac адресу, IP та VLAN роутера
+show pon power onu-rx gpon-olt_1/1/1 :: Показати сигнали всіх ONU на порту
+show gpon onu by sn abcd.efgh.1234 :: Показати порт на якому зареєстрована ONU
+show mac vlan 99 :: Показати всі MAC адреси всіх ONU які зареєстровано на VLAN 99
+show vlan summary :: Показати всі номери VLAN на OLT
+show card slotno 1 :: Показати інформацію про OLT (Скільки часу він працює)
+
+
+* conf t :: Зайти в налаштування OLT (Далі команди, які вводяться після)
+> ip dhcp snooping clear pon abcd.efgh.1234 vlan 111 gpon-onu_1/1/1:1 vport 1 :: Очистка сесії
+> ip dhcp snooping clear abcd.efgh.1234 vlan 111 :: Очистка сесії
+> interface gpon-onu_1/1/1:1 :: Зайти в інтерфейс ONU
+> no onu 111 :: Видалення ONU з OLT
+> onu 111 type GPON-1GE sn PTNHUYLO :: Реєстрація ONU за серійним номером на OLT
+> mac add permanent abcd.efgh.1234 gpon gpon-onu_1/1/1:1 vport 1 vlan 99 :: Привязати MAC роутера перманентно.
+> mac delete abcd.efgh.1234 :: Видалити перманентно привязану MAC адресу
+* pon-onu-mng gpon-onu_1/1/1:1 :: Перехід в режим конфігурації ONU (Далі команди, які вводяться після)
+> interface eth eth_0/1 state lock/unlock :: Очистка сесії без відєднування ethernet кабелю.
+> reboot :: Перезавантаження ONU віддалено.
+
+
+[epon]
+show onu unauthentication :: Пошук незареєстрованих ONU
+show epon onu state epon-olt_1/1/1 :: Показати всі зареєстровані ONU на OLT
+show running-config interface epon-onu_1/1/1:1 :: Показати конфіг ONU
+show onu detail-info epon-onu_1/1/1:1 :: Показати логи падіння та підняття ONU
+show pon power attenuation epon-onu_1/1/1:1 :: Показати сигнал ONU абонента
+show pon power onu-rx epon-olt_1/1/1 :: Показати сигнали всіх ONU на PON
+show mac epon onu epon-onu_1/1/1:1 :: Показати Mac адресу роутера
+show ip dhcp snooping port epon-onu_1/1/1:1 :: Показати Mac адресу, IP та VLAN роутера
+
+* conf t :: Зайти в налаштування OLT (Далі команди, які вводяться після)
+> interface epon-onu_1/1/1:1 :: Зайти в інтерфейс ONU
+> no onu 111 :: Видалення ONU з OLT
+> onu 111 type  NTS-101 mac abcd.efgh.1234 :: Реєстрація ONU за MAC на OLT
+> interface epon-onu_1/1/1:1 :: Зайти в інтерфейс ONU
+* pon-onu-mng epon-onu_1/1/1:1 :: Перехід в режим конфігурації ONU (Далі команди, які вводяться після)
+> interface eth eth_0/1 state lock/unlock :: Очистка сесії без відєднування ethernet кабелю.
+> reboot :: Перезавантаження ONU віддалено.
+
+[bdcom]
+show epon active-onu interface ePON 0/1 :: Показати активні ONU на 4 порту
+show epon interface ePON 0/1:11 onu ctc optical-transceiver-diagnosis :: Перевірка сигналу ONU
+show epon onu-information mac-address abcd.efgh.1234 :: Пошук ONU за Mac адресою
+show mac address-table interface ePON 0/1:11 :: Показати Mac адресу обладнання після ONU
+show epon interface ePON 0/1:11 onu port 1 state :: Показати зєднання між ONU та роутером
+show epon onu-information | include abcd :: Пошук ONU по частині Mac
+show epon onu-information mac-address abcd.efgh.1234 :: Пошук ONU по Mac
+show epon onu-ctc-optical-transceiver-diagnosis interface ePON 0/1 :: Показати сигнал PON
+write all :: Зберегти внесені зміни на OLT
+
+* conf :: Зайти в налаштування OLT (Далі команди, які вводяться після)
+> interface ePON 0/1:11 :: Зайти в інтерфейс ONU
+> no epon bind-onu mac abcd.efgh.1234 :: Видалення ONU з PON
+> epon onu port 1 ctc vlan mode tag 99 priority 0 :: Змінити VLAN в конфігу ONU
+
+
+
+
+
